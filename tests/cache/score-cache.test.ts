@@ -5,8 +5,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { findCached, loadCache, prune, save, type ScoreCache } from "../../src/cache/score-cache.js";
 import type { FeedItem } from "../../src/x/types.js";
 
-const WINDOW_MS = 42 * 60 * 60 * 1000; // keep in sync with WINDOW in module if you export it
-
 const dirs: string[] = [];
 async function tmpdir2(): Promise<string> {
   const d = await mkdtemp(join(tmpdir(), "score-cache-"));
@@ -20,8 +18,8 @@ function item(id: string, createdAt: string): FeedItem {
     createdAt, likeCount: 0, retweetCount: 0, replyCount: 0, quoteCount: 0,
     quotedTweetCount: 0, isReplyToMe: false, isRetweet: false, hasLinks: false, mentionsMe: false };
 }
-function like(now: Date, hoursAgo: number): string {
-  return new Date(now.getTime() - hoursAgo * 60 * 60 * 1000).toISOString();
+function minsAgo(now: Date, minutes: number): string {
+  return new Date(now.getTime() - minutes * 60 * 1000).toISOString();
 }
 
 afterEach(() => Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true }))));
@@ -46,8 +44,8 @@ describe("prune", () => {
     const now = new Date("2026-09-17T12:00:00Z");
     const cache: ScoreCache = {
       posts: {
-        fresh: { urgency: 2, replyProb: 0.8, createdAt: like(now, 1) },
-        stale: { urgency: 3, replyProb: 1, createdAt: like(now, 50) },
+        fresh: { urgency: 2, replyProb: 0.8, createdAt: minsAgo(now, 10) },
+        stale: { urgency: 3, replyProb: 1, createdAt: minsAgo(now, 120) },
       },
     };
     expect(prune(cache, now).posts).toHaveProperty("fresh");
@@ -60,11 +58,11 @@ describe("findCached", () => {
     const now = new Date("2026-09-17T12:00:00Z");
     const cache: ScoreCache = {
       posts: {
-        fresh: { urgency: 2, replyProb: 0.8, createdAt: like(now, 1) },
-        old: { urgency: 3, replyProb: 1, createdAt: like(now, 100) },
+        fresh: { urgency: 2, replyProb: 0.8, createdAt: minsAgo(now, 10) },
+        old: { urgency: 3, replyProb: 1, createdAt: minsAgo(now, 120) },
       },
     };
-    const items = [item("fresh", like(now, 1)), item("old", like(now, 100)), item("miss", like(now, 1))];
+    const items = [item("fresh", minsAgo(now, 10)), item("old", minsAgo(now, 120)), item("miss", minsAgo(now, 10))];
     const found = findCached(cache, items, now);
     expect(found.get("fresh")).toEqual({ urgency: 2, replyProb: 0.8 });
     expect(found.has("old")).toBe(false);

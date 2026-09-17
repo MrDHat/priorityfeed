@@ -112,14 +112,9 @@ async function cmdRun(env: EnvConfig, limit: number): Promise<number> {
   const refreshed = await maybeRefresh(env, tokens);
   const accessToken = refreshed?.access_token ?? tokens.access_token;
 
-  const apiKey = secret(env.typesafeApiKey);
-  if (!apiKey) {
-    console.error("Missing required env var: TYPESAFE_API_KEY.");
-    return 1;
-  }
-
   const source = new XTimelineSource(accessToken);
-  const scorer = new TypeSafeScorer(new TypeSafeClient({ apiKey }));
+  const apiKey = secret(env.typesafeApiKey);
+  const scorer = new TypeSafeScorer(new TypeSafeClient(apiKey ? { apiKey } : {}));
   const result = await run({
     source,
     scorer,
@@ -127,6 +122,7 @@ async function cmdRun(env: EnvConfig, limit: number): Promise<number> {
     now: () => new Date(),
     limit,
   });
+  for (const warning of result.warnings) console.warn(`warning: ${warning}`);
   console.log(result.rendered);
   return 0;
 }

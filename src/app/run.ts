@@ -1,51 +1,56 @@
-import { findCached, loadCache, prune, save, type ScoreCache } from "../cache/score-cache.js";
+import { loadCache, planScoring, save, type ScoreCache, type ScoreRecord } from "../cache/score-cache.js";
 import type { PostJudgment } from "../judge/ports.js";
-import { renderDashboard } from "../output/format.js";
+import { formatRanking } from "../output/format.js";
 import { rankPosts } from "../rank/rank.js";
 import type { Deps, RunResult } from "./deps.js";
-
-interface NewCacheEntry {
-  id: string;
-  judgment: { urgency: number; replyProb: number; createdAt: string };
-}
 
 export async function run({ source, scorer, cacheFile, now, limit }: Deps): Promise<RunResult> {
   const { items } = await source.fetchTimeline(limit);
 
   const cache = await loadCache(cacheFile);
   const cut = now();
-  const viable = prune(cache, cut);
-  const cached = findCached(viable, items, cut);
+  const { toScore, fromCache } = planScoring(items, cache, cut);
 
-  const survivors = items.filter((item) => !cached.has(item.id));
-  const survivorJudgments: PostJudgment[] = await scorer.judge(survivors);
+  const warnings: string[] = [];
+  let fresh: PostJudgment[] = [];
+  try {
+    fresh = await scorer.judge(toScore);
+  } catch (err) {
+    if (toScore.length > 0) {
+      warnings.push(
+        `TypeSafe scoring failed (${(err as Error).message ?? "unknown error"}); ranking on deterministic signals.`,
+      );
+    }
+  }
 
-  const cachedJudgments: PostJudgment[] = [...cached.entries()].map(([id, v]) => ({ id, ...v }));
-  const merged: PostJudgment[] = [...survivorJudgments, ...cachedJudgments];
-
+  const mergedById = new Map<string, PostJudgment>();
+  for (const j of [...fromCache, ...fresh]) mergedById.set(j.id, j);
+  const merged = [...mergedById.values()];
   const ranked = rankPosts(items, merged);
 
-  const createdAtById = new Map(items.map((item) => [item.id, item.createdAt]));
-  const newEntries: NewCacheEntry[] = survivorJudgments.map((j) => ({
-    id: j.id,
-    judgment: {
-      urgency: j.urgency,
-      replyProb: j.replyProb,
-      createdAt: createdAtById.get(j.id) ?? cut.toISOString(),
-    },
+  const newEntries: ScoreRecord[] = fresh.map((j) => ({
+    urgency: j.urgency,
+    replyProb: j.replyProb,
+    createdAt: cut.toISOString(),
   }));
-  await save(mergeIntoCache(viable, newEntries), cacheFile);
+  const nextCache = mergeIntoCache(cache, toScore, newEntries);
+  await save(nextCache, cacheFile);
 
   return {
-    rendered: renderDashboard(ranked),
-    scored: survivors.length,
-    fromCache: cached.size,
+    rendered: formatRanking(ranked),
+    scored: toScore.length,
+    fromCache: fromCache.length,
     total: ranked.length,
+    warnings,
   };
 }
 
-function mergeIntoCache(cache: ScoreCache, newOnes: NewCacheEntry[]): ScoreCache {
+function mergeIntoCache(cache: ScoreCache, toScore: { id: string }[], newEntries: ScoreRecord[]): ScoreCache {
   const posts = { ...cache.posts };
-  for (const entry of newOnes) posts[entry.id] = entry.judgment;
+  toScore.forEach((item, i) => {
+    const entry = newEntries[i];
+    if (entry) posts[item.id] = { createdAt: entry.createdAt, urgency: entry.urgency, replyProb: entry.replyProb };
+    else delete posts[item.id];
+  });
   return { posts };
 }

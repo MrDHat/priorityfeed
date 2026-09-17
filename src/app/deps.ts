@@ -14,4 +14,5 @@ export interface RunResult {
   scored: number; // how many posts were sent to the scorer
   fromCache: number; // how many came from cache
   total: number; // total ranked
+  warnings: string[];
 }

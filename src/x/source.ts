@@ -42,16 +42,46 @@ interface XdkUser {
   name?: string;
 }
 
+export interface XTimelineSourceOptions {
+  client?: Client;
+  preloadedMe?: Me;
+}
+
+function isOptions(v: Client | XTimelineSourceOptions): v is XTimelineSourceOptions {
+  return "client" in v || "preloadedMe" in v;
+}
+
 export class XTimelineSource implements TimelineSource {
   private readonly client: Client;
+  private readonly preloadedMe?: Me;
+  private meCache?: Me;
 
-  constructor(token: string, client?: Client) {
-    this.client = client ?? new Client({ accessToken: token });
+  constructor(token: string, clientOrOptions: Client | XTimelineSourceOptions = {}) {
+    if (isOptions(clientOrOptions)) {
+      this.client = clientOrOptions.client ?? new Client({ accessToken: token });
+      this.preloadedMe = clientOrOptions.preloadedMe;
+    } else {
+      this.client = clientOrOptions;
+    }
+  }
+
+  get meFromCache(): boolean {
+    return this.meCache !== undefined;
+  }
+
+  async fetchMe(): Promise<Me> {
+    if (this.meCache) return this.meCache;
+    if (this.preloadedMe) {
+      this.meCache = this.preloadedMe;
+      return this.meCache;
+    }
+    const meResponse = await this.client.users.getMe();
+    this.meCache = this.toMe(meResponse.data);
+    return this.meCache;
   }
 
   async fetchTimeline(limit: number): Promise<{ me: Me; items: FeedItem[] }> {
-    const meResponse = await this.client.users.getMe();
-    const me = this.toMe(meResponse.data);
+    const me = await this.fetchMe();
 
     const response = await this.client.users.getTimeline(me.id, {
       max_results: limit,

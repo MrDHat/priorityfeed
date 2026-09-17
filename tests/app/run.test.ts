@@ -44,7 +44,7 @@ describe("run", () => {
       // Pre-seed the cache with "cached" having a recent createdAt so it survives prune/findCached
       const { save } = await import("../../src/cache/score-cache.js");
       await save(
-        { posts: { cached: { urgency: 1, replyProb: 0.2, createdAt: "2026-09-01T23:00:00Z" } } },
+        { posts: { cached: { urgency: 1, replyProb: 0.2, createdAt: "2026-09-01T23:45:00Z" } } },
         cacheFile,
       );
 
@@ -61,7 +61,7 @@ describe("run", () => {
       expect(result.scored).toBe(1);
       expect(result.fromCache).toBe(1);
       expect(result.total).toBe(2);
-      expect(result.rendered).toContain("[80%] @alice");
+      expect(result.rendered).toContain("@alice");
       expect(result.rendered).toContain("post cached");
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -93,7 +93,7 @@ describe("run", () => {
       expect(cache.posts["new"]).toEqual({
         urgency: 2,
         replyProb: 0.5,
-        createdAt: "2026-09-01T00:00:00Z",
+        createdAt: "2026-09-02T00:00:00.000Z",
       });
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -113,7 +113,7 @@ describe("run", () => {
       const source: TimelineSource = { fetchTimeline: vi.fn(async () => ({ me, items })) };
       const { save } = await import("../../src/cache/score-cache.js");
       await save(
-        { posts: { fresh: { urgency: 1, replyProb: 0.2, createdAt: "2026-09-01T23:00:00Z" } } },
+        { posts: { fresh: { urgency: 1, replyProb: 0.2, createdAt: "2026-09-01T23:45:00Z" } } },
         cacheFile,
       );
 
@@ -130,7 +130,7 @@ describe("run", () => {
       expect(cache.posts["fresh"]).toEqual({
         urgency: 1,
         replyProb: 0.2,
-        createdAt: "2026-09-01T23:00:00Z",
+        createdAt: "2026-09-01T23:45:00Z",
       });
       expect(cache.posts["new"]).toBeDefined();
     } finally {

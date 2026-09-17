@@ -1,47 +1,33 @@
 import type { RankedPost } from "../rank/rank.js";
 
-export function renderDashboard(posts: RankedPost[]): string {
-  return posts.map(renderBlock).join("\n\n") + "\n";
+export interface FormatOptions {
+  now?: Date;
+  maxText?: number;
 }
 
-function renderBlock(p: RankedPost): string {
-  const pct = Math.round(p.priority * 100);
-  const title = `[${pct}%] @${p.authorUsername}: ${firstLine(p.text)}`;
-  const meta = [counts(p), relativeTime(p.createdAt), badges(p)].filter(Boolean).join(" · ");
-  const lines = [title, `      ${meta}`];
-  if (p.hasLinks) lines.push(`      https://x.com/_/status/${p.id}`);
-  return lines.join("\n");
+export function formatRanking(rows: RankedPost[], opts: FormatOptions = {}): string {
+  const now = opts.now ?? new Date();
+  const maxText = opts.maxText ?? 100;
+  return rows
+    .map((r, i) => {
+      const when = fmtAge(now, new Date(r.createdAt));
+      const text = truncate(r.text, maxText);
+      const pct = Math.round(r.priority * 100);
+      return `${String(i + 1).padStart(2)}. @${r.authorUsername} · ${when} · ${pct}% · ${r.reason}\n    ${text}`;
+    })
+    .join("\n");
 }
 
-function firstLine(text: string): string {
-  const first = text.split("\n")[0] ?? "";
-  return first.trim();
+function truncate(text: string, maxText: number): string {
+  return text.length > maxText ? text.slice(0, maxText - 1) + "…" : text;
 }
 
-function counts(p: RankedPost): string {
-  const parts: string[] = [];
-  if (p.replyCount > 0) parts.push(`⏱ ${p.replyCount} replies`);
-  if (p.likeCount > 0) parts.push(`❤ ${p.likeCount}`);
-  if (p.retweetCount > 0) parts.push(`🔁 ${p.retweetCount}`);
-  return parts.join(" ");
-}
-
-function relativeTime(iso: string): string {
-  if (!iso) return "";
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diffMs / 60000);
+function fmtAge(now: Date, then: Date): string {
+  if (Number.isNaN(then.getTime())) return "recent";
+  const mins = Math.round((now.getTime() - then.getTime()) / 60000);
   if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
-
-function badges(p: RankedPost): string {
-  const parts: string[] = [];
-  if (p.isReplyToMe && p.replyProb >= 0.6) parts.push("Reply now");
-  if (p.mentionsMe) parts.push("Mentions you");
-  if (p.isRetweet) parts.push("Retweet");
-  if (p.hasLinks) parts.push("Link");
-  return parts.join(" · ");
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
 }
