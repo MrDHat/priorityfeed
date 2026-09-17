@@ -68,6 +68,18 @@ export async function saveTokens(t: XTokens, file: string): Promise<void> {
   await writeFile(file, JSON.stringify(t, null, 2), "utf8");
 }
 
+type TokenRequestOptions = Pick<
+  LoginOptions,
+  "clientId" | "clientSecret" | "tokenBaseUrl" | "fetchImpl"
+>;
+
+export async function refreshTokens(
+  opts: TokenRequestOptions,
+  refreshToken: string,
+): Promise<XTokens> {
+  return requestTokens(opts, { grant_type: "refresh_token", refresh_token: refreshToken });
+}
+
 export async function runLogin(opts: LoginOptions): Promise<XTokens> {
   const verifier = generateVerifier();
   const challenge = codeChallenge(verifier);
@@ -94,7 +106,7 @@ export async function runLogin(opts: LoginOptions): Promise<XTokens> {
 }
 
 async function requestTokens(
-  opts: LoginOptions,
+  opts: TokenRequestOptions,
   body: {
     grant_type: string;
     code?: string;

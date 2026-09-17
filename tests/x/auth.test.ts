@@ -7,6 +7,7 @@ import {
   generateVerifier,
   loadTokens,
   makeAuthUrl,
+  refreshTokens,
   runLogin,
   saveTokens,
 } from "../../src/x/auth.js";
@@ -150,5 +151,36 @@ describe("runLogin", () => {
         startServer,
       }),
     ).rejects.toThrow(/state/);
+  });
+});
+
+describe("refreshTokens", () => {
+  it("refreshes tokens with the refresh grant", async () => {
+    const captured: Array<{ url: string; form: URLSearchParams }> = [];
+
+    const fakeFetch = async (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      captured.push({ url: String(url), form: new URLSearchParams(String(init?.body ?? "")) });
+      return new Response(
+        JSON.stringify({ access_token: "AT2", refresh_token: "RT2", expires_in: 7200 }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    const tokens = await refreshTokens(
+      { clientId: "cid", clientSecret: "cs", fetchImpl: fakeFetch },
+      "RT",
+    );
+
+    expect(tokens.access_token).toBe("AT2");
+    expect(tokens.refresh_token).toBe("RT2");
+    expect(tokens.expires_at).toBeGreaterThan(Date.now() / 1000 + 7100);
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.url).toBe("https://api.x.com/2/oauth2/token");
+    const form = captured[0]?.form;
+    expect(form?.get("grant_type")).toBe("refresh_token");
+    expect(form?.get("refresh_token")).toBe("RT");
+    expect(form?.get("client_id")).toBe("cid");
+    expect(form?.get("client_secret")).toBe("cs");
   });
 });
